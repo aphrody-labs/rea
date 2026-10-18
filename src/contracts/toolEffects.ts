@@ -53,6 +53,53 @@ const sessionEvidence = effects({ mutatesSession: true });
 
 /** Explicit effect audit for every public tool. */
 export const TOOL_EFFECTS: Readonly<Record<string, ToolEffects>> = {
+  re_recompile: effects({
+    writesFilesystem: true,
+    launchesProcess: true,
+    accessesNetwork: true,
+    executesForeignCode: true,
+    idempotent: false,
+  }),
+  engine_run: effects({
+    writesFilesystem: true,
+    launchesProcess: true,
+    executesForeignCode: true,
+    idempotent: false,
+  }),
+  engine_info: effects({ launchesProcess: true }),
+  steam_scan: effects({ writesFilesystem: true }),
+  steam_stats: effects({ writesFilesystem: true }),
+  steam_sql: effects({ writesFilesystem: true }),
+  steam_api_sync: effects({ writesFilesystem: true, accessesNetwork: true }),
+  steam_classify: effects({}),
+  steam_rea: effects({
+    writesFilesystem: true,
+    launchesProcess: true,
+    accessesNetwork: true,
+  }),
+  re_pipeline_run: effects({
+    writesFilesystem: true,
+    launchesProcess: true,
+    accessesNetwork: true,
+    executesForeignCode: true,
+    idempotent: false,
+  }),
+  re_pipeline_adapters: effects({ launchesProcess: true }),
+  formats_inspect: effects({ launchesProcess: true }),
+  formats_disasm: effects({ launchesProcess: true }),
+  binary_inspect: effects({ launchesProcess: true }),
+  ghidra_probe: effects({ launchesProcess: true }),
+  magika_identify: effects({ launchesProcess: true }),
+  replica_record: effects({
+    writesFilesystem: true,
+    launchesProcess: true,
+    executesForeignCode: true,
+    idempotent: false,
+  }),
+  replica_replay: effects({ launchesProcess: true, executesForeignCode: true }),
+  replica_nds: effects({ writesFilesystem: true, launchesProcess: true }),
+  steam_appinfo: effects({}),
+  steam_manifest: effects({}),
   list_cutter_sessions: effects({ accessesNetwork: true }),
   cutter_command: effects({
     mutatesTarget: true,

@@ -23,3 +23,12 @@ native Steam/Proton execution and the separately qualified Play streaming path.
 
 Provider sessions, credentials, raw game assets and protected evidence remain
 outside public source and distribution artifacts.
+
+## Qualification boundaries
+
+The source passes native checking and the portable migration/Frida/Bun OS suites.
+The Windows full build still requires the canonical Windows native addon built
+on the factory. POSIX private-runtime authority is unavailable in seven SQLite
+provider cases on Windows. The Bun OS MCP registration and catalog share 228
+canonical contracts, including the 21 Bun OS extensions, their effect policies,
+input/output schemas and catalog digests.

@@ -17,6 +17,11 @@ const EXECUTION_WORDING =
   /\b(?:run|runs|running|launch|launches|launching|execute|executes|executing|execution|start|starts|install|installs|uninstall|uninstalls)\b/iu;
 
 const EXECUTION_WORDING_EXCEPTIONS: Readonly<Record<string, string>> = {
+  engine_info:
+    "runs the owned metadata helper without executing the guest image",
+  steam_scan: "reads an existing local Steam installation into its index",
+  steam_sql: "executes a read-only SQL query, not the selected game's code",
+  steam_rea: "runs the owned inspection pipeline with target tracing disabled",
   inspect_with_objdump:
     "runs a caller-selected inspection tool, not target code",
   start_gdb_session:
@@ -140,6 +145,7 @@ describe("tool effects", () => {
       "close_gdb_session",
       "close_rizin_debug_session",
       "cutter_command",
+      "engine_run",
       "execute_rizin_command",
       "gdb_console",
       "install_adb_package",
@@ -147,6 +153,10 @@ describe("tool effects", () => {
       "load_frida_script",
       "observe_native_calls",
       "push_adb_file",
+      "re_pipeline_run",
+      "re_recompile",
+      "replica_record",
+      "replica_replay",
       "resume_frida_session",
       "rizin_debug_command",
       "start_adb_activity",

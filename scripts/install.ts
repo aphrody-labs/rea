@@ -1,47 +1,95 @@
 // SPDX-License-Identifier: Apache-2.0
-/** `re install`: installs the RE plugin skills and registers the `re` MCP server for the local agent. */
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+/** Installs explicitly selected REA skills. MCP registration belongs to Aphrody. */
+import { cp, lstat, mkdir, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
-const packageRoot = resolve(import.meta.dir, "..");
-const root = resolve(packageRoot, "../..");
+export interface SkillInstallContext {
+  home: string;
+  packageRoot: string;
+  output?: (text: string) => void;
+}
 
-/** Entry point for `re install`. Returns the process exit code. */
-export async function main(_argv: string[]): Promise<number> {
-  const skillsDir = join(homedir(), ".claude", "skills");
-  const pluginSkills = join(packageRoot, "plugin", "skills");
-  const sources: [string, string][] = readdirSync(pluginSkills, {
-    withFileTypes: true,
-  })
-    .filter(
-      (entry) =>
-        entry.isDirectory() &&
-        existsSync(join(pluginSkills, entry.name, "SKILL.md")),
-    )
-    .map((entry) => [entry.name, join(pluginSkills, entry.name)]);
-  for (const [name, rel] of [
-    ["steamcmd", "vendor/steam/steam-claude-skills/steamcmd"],
-    ["steamos-maintenance", "vendor/steam/steamos-claude-skill"],
-    ["idapython", "vendor/re/ida-pro-mcp/skills/idapython"],
-  ] as const)
-    if (existsSync(join(root, rel, "SKILL.md")))
-      sources.push([name, join(root, rel)]);
+async function preserveDestination(destination: string): Promise<boolean> {
+  const existing = await lstat(destination).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    },
+  );
+  return (
+    existing !== null && (!existing.isDirectory() || existing.isSymbolicLink())
+  );
+}
 
-  mkdirSync(skillsDir, { recursive: true });
-  for (const [name, src] of sources) {
-    const dest = join(skillsDir, name);
-    rmSync(dest, { recursive: true, force: true });
-    cpSync(src, dest, { recursive: true });
+const help = `rea install — install this fork's skills without changing MCP configuration
+
+Usage: rea install [--skills-only] [--codex] [--dry-run | --apply]
+
+  --help          Show help without inspecting or changing user files
+  --dry-run       Show the installation plan (default)
+  --apply         Apply the explicitly selected skills-only installation
+  --skills-only   Select REA's bundled skills; required with --apply
+  --codex         Install into ~/.codex/skills (otherwise ~/.claude/skills)
+
+No MCP server, provider, credential, global environment or agent configuration is changed.
+`;
+
+export async function main(
+  argv: string[],
+  context: SkillInstallContext = {
+    home: homedir(),
+    packageRoot: resolve(import.meta.dir, ".."),
+  },
+): Promise<number> {
+  const output = context.output ?? console.log;
+  if (argv.includes("--help") || argv.includes("-h")) {
+    output(help);
+    return 0;
   }
-
-  // The MCP runtime is served from the bundled build.
-  if (!existsSync(join(packageRoot, "dist", "mcp", "main.js")))
-    await Bun.$`bun run build`.cwd(packageRoot);
-  await Bun.$`claude mcp remove -s user re`.quiet().nothrow();
-  await Bun.$`claude mcp add -s user re -- bun ${join(packageRoot, "scripts", "rea.mjs")} mcp`.quiet();
-  console.log(
-    `skills: ${sources.map((source) => source[0]).join(", ")}\nmcp: re`,
+  const allowed = new Set(["--dry-run", "--apply", "--skills-only", "--codex"]);
+  if (argv.some((arg) => !allowed.has(arg)))
+    throw new Error("Unknown install option; use rea install --help");
+  if (argv.includes("--dry-run") && argv.includes("--apply"))
+    throw new Error("Choose --dry-run or --apply");
+  const apply = argv.includes("--apply");
+  if (apply && !argv.includes("--skills-only"))
+    throw new Error("Installation requires --apply --skills-only");
+  const sourceRoot = join(context.packageRoot, "plugin", "skills");
+  const skillsDir = join(
+    context.home,
+    argv.includes("--codex") ? ".codex" : ".claude",
+    "skills",
+  );
+  const sources = [];
+  for (const entry of await readdir(sourceRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^[a-z0-9-]+$/.test(entry.name)) continue;
+    const source = join(sourceRoot, entry.name);
+    if (await Bun.file(join(source, "SKILL.md")).exists()) {
+      const destination = join(skillsDir, entry.name);
+      const action = (await preserveDestination(destination))
+        ? "preserve"
+        : "copy";
+      sources.push({ name: entry.name, source, destination, action });
+    }
+  }
+  sources.sort((a, b) => a.name.localeCompare(b.name));
+  if (apply) {
+    await mkdir(skillsDir, { recursive: true });
+    for (const item of sources)
+      if (item.action === "copy")
+        await cp(item.source, item.destination, { recursive: true });
+  }
+  output(
+    JSON.stringify(
+      {
+        status: apply ? "installed" : "planned",
+        skills: sources,
+        mcpChanged: false,
+      },
+      null,
+      2,
+    ),
   );
   return 0;
 }

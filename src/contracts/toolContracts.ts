@@ -1,3 +1,4 @@
+import { BUN_OS_TOOL_CONTRACTS } from "./bunOsToolContracts.js";
 import { CAPTURE_TOOL_CONTRACTS } from "./captures/captureToolContracts.js";
 import { SIGNAL_TOOL_CONTRACTS } from "./signals/signalToolContracts.js";
 import { WASM_TOOL_CONTRACTS } from "./wasm/wasmToolContracts.js";
@@ -37,6 +38,7 @@ import { FRIDA_TOOL_CONTRACTS } from "./fridaToolContracts.js";
 
 /** Complete ordered public inventory used by registration and verification. */
 export const TOOL_CONTRACTS = [
+  ...BUN_OS_TOOL_CONTRACTS,
   ...OFFICIAL_TOOL_CONTRACTS,
   ...ENHANCED_TOOL_CONTRACTS,
   ...NATIVE_TOOL_CONTRACTS,
