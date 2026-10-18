@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 /**
  * Canonical public identity shared by packaging, setup, MCP, and skill install.
  * Centralization prevents persistent client registrations from drifting from
@@ -10,7 +12,7 @@ export const PRODUCT_IDENTITY = {
   registrationPackageSpecifier: `${PACKAGE_METADATA.name}@${PACKAGE_METADATA.version}`,
   packageVersion: PACKAGE_METADATA.version,
   cliBinary: "rea",
-  mcpCommand: `npx -y ${PACKAGE_METADATA.name}@${PACKAGE_METADATA.version} mcp`,
+  mcpCommand: `bun ${JSON.stringify(fileURLToPath(new URL("../scripts/rea.mjs", import.meta.url)))} mcp`,
   mcpServerKey: "rea",
   skillName: "reverse-engineer-anything",
   skillVersion: PACKAGE_METADATA.skillVersion,

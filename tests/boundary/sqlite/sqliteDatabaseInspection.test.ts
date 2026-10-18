@@ -265,7 +265,11 @@ it("refuses possible shadow tables when their virtual module is unavailable", as
   const bytes = await readFile(path);
   const declaration = bytes.indexOf(Buffer.from("USING fts5"));
   if (declaration < 0) throw new Error("Virtual declaration missing");
-  bytes.write("zzzz", declaration + Buffer.byteLength("USING "), "utf8");
+  bytes.write(
+    "zzzz",
+    declaration + new TextEncoder().encode("USING ").length,
+    "utf8",
+  );
   await writeFile(path, bytes);
 
   for (const table of ["SeArCh_É_data", "search_É_manual"])

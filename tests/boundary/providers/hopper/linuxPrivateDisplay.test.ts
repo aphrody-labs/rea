@@ -294,7 +294,7 @@ describe("private display probe output settlement", () => {
         outcome: "exited",
         exitCode: 0,
         stderr: "firstlast",
-        stderrBytes: Buffer.byteLength("firstlast"),
+        stderrBytes: new TextEncoder().encode("firstlast").length,
         cleanupIncomplete: false,
       });
     },

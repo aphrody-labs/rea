@@ -77,7 +77,7 @@ describe("CdpBrowserProvider: passive evidence redaction", () => {
           {
             direction: "sent",
             opcode: 1,
-            payload_bytes: Buffer.byteLength("websocket-secret"),
+            payload_bytes: new TextEncoder().encode("websocket-secret").length,
             payload_shape: null,
           },
           {
@@ -251,8 +251,8 @@ describe("CdpBrowserProvider: explicitly requested text and payload shapes", () 
         { argument_index: 1, type: "number", text: "42" },
       ],
       retained_bytes:
-        Buffer.byteLength("authorization=Bearer console-secret") +
-        Buffer.byteLength("42"),
+        new TextEncoder().encode("authorization=Bearer console-secret").length +
+        new TextEncoder().encode("42").length,
     });
     expect(result.value.network.requests[0]?.body_shapes).toMatchObject({
       status: "included",

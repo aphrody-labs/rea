@@ -683,7 +683,11 @@ it("retains an unavailable virtual module definition without executing it", asyn
   const declaration = bytes.indexOf(Buffer.from("USING fts5"));
   if (declaration < 0)
     throw new Error("SQLite virtual module declaration not found");
-  bytes.write("zzzz", declaration + Buffer.byteLength("USING "), "utf8");
+  bytes.write(
+    "zzzz",
+    declaration + new TextEncoder().encode("USING ").length,
+    "utf8",
+  );
   await writeFile(path, bytes);
   const provider = createProvider();
   const result = await provider.inspect({ path, schema_scope: "database" });

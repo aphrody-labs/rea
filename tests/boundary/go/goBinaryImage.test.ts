@@ -252,8 +252,9 @@ it("preserves non-UTF8 compiler and module bytes without rejecting other observe
     module_text: GO_MODULE_TEXT,
   });
   const module = createGoBinaryFixture({ moduleText: "build\t-tags=x\n" });
-  module.bytes[module.moduleOffset + 16 + Buffer.byteLength("build\t-tags=")] =
-    0xff;
+  module.bytes[
+    module.moduleOffset + 16 + new TextEncoder().encode("build\t-tags=").length
+  ] = 0xff;
   expect(readGoBinaryImage(module.bytes).build_info).toMatchObject({
     go_version: "go1.26.0",
     module_text: null,

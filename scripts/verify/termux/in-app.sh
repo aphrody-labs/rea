@@ -24,7 +24,7 @@ export PATH="$report/toolchain/node_modules/.bin:$PATH"
 node --version
 npm --version
 dpkg-query -W nodejs-lts chromium termux-exec
-npm install --no-package-lock --ignore-scripts
-npm run build:termux
+bun install --no-package-lock --ignore-scripts
+bun run build:termux
 unset PLAYWRIGHT_BROWSERS_PATH npm_config_playwright_browsers_path npm_package_config_playwright_browsers_path
-node scripts/verify/termux/browser.mjs
+bun scripts/verify/termux/browser.mjs

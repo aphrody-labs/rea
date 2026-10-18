@@ -1,4 +1,18 @@
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+
+/** The nearest bun.lock at or above the package root, and the package's workspace key in it. */
+const findWorkspaceLock = (root) => {
+  for (let directory = root; ; directory = dirname(directory)) {
+    if (existsSync(join(directory, "bun.lock")))
+      return {
+        path: join(directory, "bun.lock"),
+        workspace: relative(directory, root).replaceAll("\\", "/"),
+      };
+    if (dirname(directory) === directory)
+      throw new Error(`No bun.lock above ${root}`);
+  }
+};
 
 const identityOf = (record) => {
   const identity = record[0];
@@ -27,19 +41,21 @@ const resolveKey = (packages, from, name) => {
 
 /**
  * Read bun.lock and classify every locked package as runtime or development
- * by reachability from the root workspace's dependency groups.
+ * by reachability from the package workspace's dependency groups.
  */
 export async function readBunLock(root) {
-  const text = await Bun.file(join(root, "bun.lock")).text();
-  const lock = Bun.JSONC.parse(text);
-  const rootWorkspace = lock.workspaces[""];
+  const { path, workspace } = findWorkspaceLock(root);
+  const lock = Bun.JSONC.parse(await Bun.file(path).text());
+  const rootWorkspace = lock.workspaces[workspace];
+  // Workspace-specific versions are keyed under the workspace package name.
+  const scope = workspace === "" ? "" : rootWorkspace.name;
   const packages = lock.packages;
   const reach = (groups) => {
     const seen = new Set();
     const queue = [];
     for (const group of groups)
       for (const name of Object.keys(rootWorkspace[group] ?? {})) {
-        const key = resolveKey(packages, "", name);
+        const key = resolveKey(packages, scope, name);
         if (key !== undefined) queue.push(key);
       }
     while (queue.length > 0) {
@@ -83,13 +99,14 @@ export async function readBunLock(root) {
     .sort((left, right) =>
       left.key < right.key ? -1 : left.key > right.key ? 1 : 0,
     );
-  return { lock, entries };
+  return { lock, entries, scope };
 }
 
 /** The locked version of a top-level package. */
 export async function lockedVersion(root, name) {
-  const { lock } = await readBunLock(root);
-  const record = lock.packages[name];
+  const { lock, scope } = await readBunLock(root);
+  const key = resolveKey(lock.packages, scope, name);
+  const record = key === undefined ? undefined : lock.packages[key];
   if (record === undefined) throw new Error(`Missing locked ${name} version`);
   return identityOf(record).version;
 }

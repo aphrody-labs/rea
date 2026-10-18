@@ -99,7 +99,7 @@ it("scopes output checkpoints to raw bytes on one supervisor and epoch", () => {
     expect(scoped.complete).toBe(true);
     expect(scoped.snapshot.stdout.text).toBe("current: é\n");
     expect(scoped.snapshot.stdout.bytes).toBe(
-      Buffer.byteLength("current: é\n"),
+      new TextEncoder().encode("current: é\n").length,
     );
     expect(scoped.snapshot.stderr).toEqual({
       text: "\ufffda",

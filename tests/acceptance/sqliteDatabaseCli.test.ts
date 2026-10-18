@@ -701,7 +701,11 @@ cliTest.runIf(SQLITE_NATIVE_LIMITS_AVAILABLE)(
     const bytes = await readFile(valid);
     const declaration = bytes.indexOf(Buffer.from("USING fts5"));
     if (declaration < 0) throw new Error("Virtual declaration missing");
-    bytes.write("zzzz", declaration + Buffer.byteLength("USING "), "utf8");
+    bytes.write(
+      "zzzz",
+      declaration + new TextEncoder().encode("USING ").length,
+      "utf8",
+    );
     await writeFile(valid, bytes);
     const schema = await call("inspect_sqlite_database", { path: valid });
     expect(schema.isError).not.toBe(true);

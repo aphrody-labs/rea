@@ -34,7 +34,7 @@ it("threads the selected host and environment into system diagnostics", async ()
         return {
           stdout: "linux-vdso.so.1",
           stderr: "",
-          stdoutBytes: Buffer.byteLength("linux-vdso.so.1"),
+          stdoutBytes: new TextEncoder().encode("linux-vdso.so.1").length,
           stderrBytes: 0,
         };
       if (command === "which")

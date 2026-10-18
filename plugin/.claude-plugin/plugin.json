@@ -1,0 +1,22 @@
+{
+  "name": "re",
+  "version": "1.4.4",
+  "description": "Bun OS reverse engineering and emulation: one CLI and MCP server (binaries, firmware, apps, web, Android, Steam, the cross-OS RE pipeline, static recompilation of console BIOS/ROM images, Bun Engine machines) with the reverse-engineer-anything, Steam, Ghidra, Replica, Bun Engine and static-recompile skills.",
+  "license": "MIT AND Apache-2.0",
+  "keywords": [
+    "reverse-engineering",
+    "ghidra",
+    "steam",
+    "emulation",
+    "recompilation",
+    "mcp",
+    "skills"
+  ],
+  "skills": "./skills",
+  "mcpServers": {
+    "re": {
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/../scripts/rea.mjs", "mcp"]
+    }
+  }
+}

@@ -781,7 +781,7 @@ const makeTest = <Context>(
       };
     direct.for = cases(false) as never;
     direct.each = cases(true) as never;
-    direct.todo = (name: string) => bun.test.todo(name);
+    direct.todo = (name: string) => bun.test.todo(name, () => {});
     direct.skipIf = (condition: unknown) =>
       (condition ? build("skip") : direct) as never;
     direct.runIf = (condition: unknown) =>

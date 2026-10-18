@@ -1,3 +1,4 @@
+import { registerBunOsTools } from "./registerBunOsTools.js";
 import type { PacketCaptureService } from "../application/captures/PacketCaptureService.js";
 import { createPacketCaptureService } from "../composition/captures.js";
 import { registerCaptureTools } from "./registerCaptureTools.js";
@@ -579,6 +580,7 @@ export const createServer = (
     analysisAdmission,
   );
   registerObservationTools(toolContext);
+  registerBunOsTools(server);
   registerGuidedPrompts(server, analysis, session);
   if (session !== undefined) {
     registerSessionTools(server, session, toolLogger, {

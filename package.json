@@ -336,7 +336,10 @@
     "write-file-atomic": "8.0.0",
     "ws": "8.22.0",
     "yaml": "2.9.1",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@aphrody/bun-engine": "workspace:*",
+    "@aphrody/bun-steam": "workspace:*",
+    "@aphrody/paths": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "1.4.3",
@@ -347,12 +350,16 @@
     "fast-check": "4.10.2",
     "husky": "9.1.7",
     "jscpd": "5.4.1",
-    "vitepress": "1.6.4"
+    "vitepress": "1.6.4",
+    "@aphrody/bun-types": "workspace:*"
   },
   "optionalDependencies": {
     "frida": "17.23.3"
   },
   "trustedDependencies": [
     "frida"
-  ]
+  ],
+  "exports": {
+    "./pipeline": "./src/pipeline/index.ts"
+  }
 }

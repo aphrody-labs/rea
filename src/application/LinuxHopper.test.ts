@@ -354,7 +354,8 @@ describe("Linux Hopper cleanup and failure details", () => {
       .mockResolvedValue({
         stdout: "libc.so.6 => /lib/libc.so.6",
         stderr: "",
-        stdoutBytes: Buffer.byteLength("libc.so.6 => /lib/libc.so.6"),
+        stdoutBytes: new TextEncoder().encode("libc.so.6 => /lib/libc.so.6")
+          .length,
         stderrBytes: 0,
       });
     const close = vi

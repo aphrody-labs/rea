@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const transpiler = new Bun.Transpiler({
   loader: "ts",
-  target: "node",
+  target: "bun",
   trimUnusedImports: false,
 });
 const glob = new Bun.Glob("**/*.ts");

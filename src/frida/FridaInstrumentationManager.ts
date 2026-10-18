@@ -926,7 +926,8 @@ export class FridaInstrumentationManager implements FridaInstrumentationPort {
         payloadResult = {
           value: { payload_unavailable: true },
           truncated: true,
-          bytes: Buffer.byteLength('{"payload_unavailable":true}'),
+          bytes: new TextEncoder().encode('{"payload_unavailable":true}')
+            .length,
         };
       }
       if (payloadResult.truncated) markMessageTruncated(managed, scriptId);
@@ -1336,7 +1337,11 @@ const boundedJsonValue = (
   const result = visit(input, maximumBytes, 0);
   const bytes = Buffer.byteLength(JSON.stringify(result.value));
   return bytes > maximumBytes
-    ? { value: null, truncated: true, bytes: Buffer.byteLength("null") }
+    ? {
+        value: null,
+        truncated: true,
+        bytes: new TextEncoder().encode("null").length,
+      }
     : { ...result, bytes };
 };
 

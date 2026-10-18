@@ -16,7 +16,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2023",
-    "types": ["bun"],
+    "types": ["@aphrody/bun-types"],
     "verbatimModuleSyntax": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "docs/.vitepress/config.ts"],

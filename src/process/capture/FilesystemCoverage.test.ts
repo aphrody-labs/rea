@@ -172,7 +172,8 @@ it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
         path: "root_0:unreadable.txt",
         size_bytes: 17,
         remaining_budget_bytes:
-          scenario.limits.file_bytes - Buffer.byteLength("still observed"),
+          scenario.limits.file_bytes -
+          new TextEncoder().encode("still observed").length,
         reason: "file_unavailable",
         system_code: "EACCES",
       });

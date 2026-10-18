@@ -82,7 +82,7 @@ describe("safe artifact output file identity admission", () => {
       await expect(
         tree.write("payload.txt", Readable.from(Buffer.from("owned")), {
           sha256: createHash("sha256").update("owned").digest("hex"),
-          bytes: Buffer.byteLength("owned"),
+          bytes: new TextEncoder().encode("owned").length,
         }),
       ).rejects.toThrow("injected file identity failure");
       stat.mockRestore();
@@ -169,7 +169,7 @@ describe("safe artifact output tree identity", () => {
       const writeFailure = await tree
         .write("escaped.txt", Readable.from(Buffer.from("outside")), {
           sha256: createHash("sha256").update("outside").digest("hex"),
-          bytes: Buffer.byteLength("outside"),
+          bytes: new TextEncoder().encode("outside").length,
         })
         .catch((cause: unknown) => cause);
       expect(writeFailure).toBeInstanceOf(ArtifactReaderFailure);
@@ -216,7 +216,7 @@ describe("safe artifact output tree identity", () => {
       const writeFailure = await tree
         .write("nested/escaped.txt", Readable.from(Buffer.from("outside")), {
           sha256: createHash("sha256").update("outside").digest("hex"),
-          bytes: Buffer.byteLength("outside"),
+          bytes: new TextEncoder().encode("outside").length,
         })
         .catch((cause: unknown) => cause);
       expect(writeFailure).toBeInstanceOf(ArtifactReaderFailure);
@@ -311,7 +311,7 @@ describe("safe artifact output tree", () => {
     await expect(
       tree.write("nested/file.txt", Readable.from(Buffer.from("unexpected")), {
         sha256: "0".repeat(64),
-        bytes: Buffer.byteLength("unexpected"),
+        bytes: new TextEncoder().encode("unexpected").length,
       }),
     ).rejects.toThrow(/disagrees/u);
     expect(await tree.rollback()).toMatchObject({
@@ -378,7 +378,7 @@ describe("safe artifact output tree", () => {
         await expect(
           tree.write("new/file.txt", Readable.from(Buffer.from("late")), {
             sha256: createHash("sha256").update("late").digest("hex"),
-            bytes: Buffer.byteLength("late"),
+            bytes: new TextEncoder().encode("late").length,
           }),
         ).rejects.toBeInstanceOf(ArtifactReaderFailure);
         await expect(tree.commit()).rejects.toBeInstanceOf(
@@ -433,7 +433,7 @@ describe("safe artifact output tree", () => {
     await expect(
       tree.write("late.txt", Readable.from(Buffer.from("late")), {
         sha256: createHash("sha256").update("late").digest("hex"),
-        bytes: Buffer.byteLength("late"),
+        bytes: new TextEncoder().encode("late").length,
       }),
     ).rejects.toBeInstanceOf(ArtifactReaderFailure);
     await expect(tree.commit()).rejects.toBeInstanceOf(ArtifactReaderFailure);

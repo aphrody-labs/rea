@@ -61,7 +61,7 @@ it("omits trailing blank cells from visible lines without losing rows", async ()
   ]);
   expect(retention.retained_bytes).toBe(
     Buffer.byteLength(frame?.serialized_state ?? "") +
-      Buffer.byteLength("left  right  indented"),
+      new TextEncoder().encode("left  right  indented").length,
   );
 });
 

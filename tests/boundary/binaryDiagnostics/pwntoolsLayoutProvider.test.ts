@@ -552,7 +552,7 @@ it
       if (!result.ok) throw result.error;
       expect(result.value.artifact).toMatchObject({
         path,
-        bytes: Buffer.byteLength("source-owned-seam-bytes"),
+        bytes: new TextEncoder().encode("source-owned-seam-bytes").length,
       });
       expect(result.value.artifact.sha256).toMatch(/^[a-f0-9]{64}$/);
       expect(result.value.diagnostics.stderr).toBe("upstream warning");

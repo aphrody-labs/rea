@@ -27,8 +27,8 @@ export const dependencyInstallProblems = (rootPackage, installedVersions) =>
 
 const installedVersion = async (root, name) => {
   try {
-    return (await readJson(resolve(root, "node_modules", name, "package.json")))
-      .version;
+    const manifest = Bun.resolveSync(`${name}/package.json`, root);
+    return (await readJson(manifest)).version;
   } catch {
     return undefined;
   }

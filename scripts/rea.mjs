@@ -7,6 +7,28 @@ import { fileURLToPath } from "node:url";
 // Route production MCP before importing Incur. Incur owns registration helpers
 // such as `mcp add`, while the MCP runtime serves the stdio tool catalog.
 const args = process.argv.slice(2);
+// Bun OS subcommands run from source, beside the bundled Incur CLI.
+const bunOsCommands = {
+  steam: ["@aphrody/bun-steam/cli", "main"],
+  "steam-rea": ["../src/steamRea.ts", "main"],
+  pipeline: ["../src/pipeline/cli.ts", "main"],
+  recompile: ["../src/pipeline/recompile.ts", "main"],
+  engine: ["../src/engine/machine.ts", "main"],
+  formats: ["../src/engine/formats.ts", "main"],
+  bin: ["../src/binary/inspect.ts", "main"],
+  replica: ["../src/replica/cli.ts", "main"],
+  "ghidra-win": ["../src/replica/cli.ts", "ghidraMain"],
+  magika: ["../src/replica/cli.ts", "magikaMain"],
+  dbxv2: ["../src/bunre.ts", "main"],
+  game: ["../src/game/cli.ts", "main"],
+  install: ["./install.ts", "main"],
+};
+if (args[0] !== undefined && Object.hasOwn(bunOsCommands, args[0])) {
+  const [module, entry] = bunOsCommands[args[0]];
+  const commands = await import(module);
+  process.exit(await commands[entry](args.slice(1)));
+}
+
 const { default: packageJson } = await import("../package.json", {
   with: { type: "json" },
 });
