@@ -113,8 +113,8 @@ export async function spawnCaptured(
   const timer = setTimeout(() => proc.kill(), timeoutMs);
   try {
     const [out, err, code] = await Promise.all([
-      proc.stdout.text(),
-      proc.stderr.text(),
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
       proc.exited,
     ]);
     return { code, out, err };

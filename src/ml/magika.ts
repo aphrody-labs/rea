@@ -1,6 +1,6 @@
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkoutRoot, findNative } from "../pipeline/runner.js";
+import { checkoutRoot } from "../pipeline/runner.js";
 
 const root = process.env.BUN_ENGINE_HOME
   ? resolve(process.env.BUN_ENGINE_HOME)
@@ -88,28 +88,10 @@ export interface MagikaTree {
   seconds: number;
 }
 
-/**
- * The embedded CPython host library: `BUN_PYTHON_HOST_LIBRARY` when it exists, otherwise the
- * `bun-python-host` build of this checkout (any Cargo slot).
- */
-async function pythonHostLibrary(): Promise<void> {
-  const configured = process.env.BUN_PYTHON_HOST_LIBRARY;
-  if (configured && (await Bun.file(configured).exists())) return;
-  const name =
-    process.platform === "win32"
-      ? "bun_python_host.dll"
-      : process.platform === "darwin"
-        ? "libbun_python_host.dylib"
-        : "libbun_python_host.so";
-  const built = await findNative(name, "BUN_PYTHON_HOST_LIBRARY");
-  if (built) process.env.BUN_PYTHON_HOST_LIBRARY = built;
-}
-
-/** One Magika session in the embedded CPython; the classifier loads once per session. */
+/** One Magika session: a venv Python subprocess classifies the paths and prints one JSON object per line. */
 async function withMagika<T>(
-  work: (
-    identify: (absolute: string) => Promise<MagikaPrediction>,
-  ) => Promise<T>,
+  paths: string[],
+  work: (results: MagikaPrediction[]) => T,
 ): Promise<T> {
   const executable = join(
     environment,
@@ -119,25 +101,46 @@ async function withMagika<T>(
   if (!(await Bun.file(executable).exists()))
     throw new Error("Magika is not built; run `re magika setup`");
 
-  process.env.VIRTUAL_ENV = environment;
-  process.env.BUN_PYTHON_EXECUTABLE = executable;
-  process.env.PYTHONPATH = [bridge, process.env.PYTHONPATH]
-    .filter(Boolean)
-    .join(delimiter);
-  await pythonHostLibrary();
-
-  const { Python } = await import("bun:python");
-  await using py = await Python.async();
   const packages = await sitePackages();
-  await py.exec(
-    `import site, sys; site.addsitedir(${JSON.stringify(packages)}); sys.path.insert(0, ${JSON.stringify(bridge)})`,
-  );
-  return await work(
-    async (absolute) =>
-      JSON.parse(
-        await py.call("magika_bridge", "identify_path_json", absolute),
-      ) as MagikaPrediction,
-  );
+  const script = [
+    "import site, sys",
+    `site.addsitedir(${JSON.stringify(packages)})`,
+    `sys.path.insert(0, ${JSON.stringify(bridge)})`,
+    "import magika_bridge",
+    "for line in sys.stdin:",
+    "    path = line.rstrip('\r\n')",
+    "    if path:",
+    "        print(magika_bridge.identify_path_json(path), flush=True)",
+  ].join("
+");
+  const child = Bun.spawn([executable, "-c", script], {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+    env: {
+      ...process.env,
+      VIRTUAL_ENV: environment,
+      PYTHONPATH: [bridge, process.env.PYTHONPATH]
+        .filter(Boolean)
+        .join(delimiter),
+    },
+  });
+  child.stdin.write(paths.join("
+") + "
+");
+  void child.stdin.end();
+  const [out, err, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) throw new Error(`Magika failed (${code}): ${err.trim()}`);
+  const results = out
+    .split("
+")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as MagikaPrediction);
+  return work(results);
 }
 
 export async function identifyWithMagika(
@@ -146,7 +149,7 @@ export async function identifyWithMagika(
   const absolute = resolve(path);
   if (!(await Bun.file(absolute).exists()))
     throw new Error(`file not found: ${path}`);
-  return withMagika((identify) => identify(absolute));
+  return withMagika([absolute], (results) => results[0]!);
 }
 
 /** Identify every regular file under `dir` (depth-first, at most `limit` files). */
@@ -171,11 +174,7 @@ export async function identifyTreeWithMagika(
     paths.push(path);
   }
   paths.sort();
-  const results = await withMagika(async (identify) => {
-    const out: MagikaPrediction[] = [];
-    for (const path of paths) out.push(await identify(path));
-    return out;
-  });
+  const results = await withMagika(paths, (identified) => identified);
   const labels: Record<string, number> = {};
   for (const r of results) {
     const label = r.prediction?.label ?? r.status;
