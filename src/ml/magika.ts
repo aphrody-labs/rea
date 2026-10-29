@@ -108,11 +108,10 @@ async function withMagika<T>(
     `sys.path.insert(0, ${JSON.stringify(bridge)})`,
     "import magika_bridge",
     "for line in sys.stdin:",
-    "    path = line.rstrip('\r\n')",
+    "    path = line.rstrip('\\r\\n')",
     "    if path:",
     "        print(magika_bridge.identify_path_json(path), flush=True)",
-  ].join("
-");
+  ].join("\n");
   const child = Bun.spawn([executable, "-c", script], {
     stdin: "pipe",
     stdout: "pipe",
@@ -125,9 +124,7 @@ async function withMagika<T>(
         .join(delimiter),
     },
   });
-  child.stdin.write(paths.join("
-") + "
-");
+  child.stdin.write(paths.join("\n") + "\n");
   void child.stdin.end();
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
@@ -136,8 +133,7 @@ async function withMagika<T>(
   ]);
   if (code !== 0) throw new Error(`Magika failed (${code}): ${err.trim()}`);
   const results = out
-    .split("
-")
+    .split("\n")
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line) as MagikaPrediction);
   return work(results);
