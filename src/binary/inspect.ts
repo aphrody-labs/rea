@@ -9,10 +9,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
-import windows from "bun:windows";
 import { installedGames, norm, resolveSteamRoot } from "@aphrody/bun-steam";
 import { installedRelease, usrRoot } from "@aphrody/bun-engine/usr";
 import { findBinary, spawnCaptured } from "../pipeline/runner.js";
+
+// `bun:windows` exists only in the retired aphrody-labs/bun fork. Upstream Bun lacks it, so the
+// PE detail layer is optional: without it `peFacts` reports nothing and `bunre pipeline triage`
+// stays the source of format, import and section facts.
+const windows = await import("bun:windows").then(
+  (module) => module.default,
+  () => null,
+);
 
 /** Remote reads stay bounded: binaries only, never whole game installs. */
 const MAX_REMOTE_BYTES = 256 * 1024 * 1024;
@@ -63,7 +70,7 @@ function peFacts(
   path: string,
   perModule: number,
 ): Record<string, unknown> | null {
-  if (!windows.pe.looksLikePe(bytes)) return null;
+  if (!windows?.pe.looksLikePe(bytes)) return null;
   const image = windows.pe.parse(bytes, path);
   if (!image) return null;
   return JSON.parse(

@@ -1,14 +1,26 @@
 import { dirname, join } from "node:path";
-import windows from "bun:windows";
 import { checkoutRoot } from "../pipeline/runner.js";
+
+// `bun:windows` exists only in the retired aphrody-labs/bun fork; upstream Bun has no such
+// module. Load it lazily so the MCP server and CLI start on upstream Bun and only the Win32
+// Ghidra commands report it as unavailable.
+const windows = await import("bun:windows").then(
+  (module) => module.default,
+  () => null,
+);
 
 const root = checkoutRoot();
 export const ghidraRoot = join(root, "vendor", "ghidra");
 export const ntrGhidraRoot = join(root, "vendor", "ntr-ghidra");
 
-function requireWindows(): void {
+function requireWindows(): NonNullable<typeof windows> {
+  if (!windows)
+    throw new Error(
+      "Ghidra Win32 integration needs the bun:windows module, which upstream Bun does not ship",
+    );
   if (!windows.isSupported)
     throw new Error("Ghidra Win32 integration requires Windows");
+  return windows;
 }
 
 async function resolveJava(): Promise<string | null> {
@@ -58,7 +70,7 @@ async function probeGhidraInstall() {
 }
 
 export async function probeGhidraWindows() {
-  requireWindows();
+  const windows = requireWindows();
   const toolchain = windows.toolchain();
   return {
     source: ghidraRoot,
@@ -79,7 +91,7 @@ export async function probeGhidraWindows() {
 }
 
 export async function inspectPeForGhidra(path: string) {
-  requireWindows();
+  const windows = requireWindows();
   const bytes = new Uint8Array(await Bun.file(path).arrayBuffer());
   if (!windows.pe.looksLikePe(bytes))
     throw new TypeError(`not a PE image: ${path}`);
@@ -100,7 +112,7 @@ export async function inspectPeForGhidra(path: string) {
 }
 
 export async function buildGhidraWindows(): Promise<number> {
-  requireWindows();
+  const windows = requireWindows();
   const java = await resolveJava();
   if (!java) throw new Error("Ghidra build requires JDK 25 on PATH");
   const launcher = join(ghidraRoot, "gradlew.bat");

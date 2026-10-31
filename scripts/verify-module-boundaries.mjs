@@ -7,7 +7,29 @@ import { inspectModuleBoundaries } from "./lib/module-boundaries.mjs";
 
 const execute = promisify(execFile);
 const root = process.cwd();
-const selected = process.argv.slice(2);
+const argv = process.argv.slice(2);
+// `--staged` (the pre-commit hook: `bun lint --staged` forwards it through the `lint` script)
+// checks the staged TypeScript sources under src/ instead of the whole tree.
+const selected = argv.includes("--staged")
+  ? (
+      await execute(
+        "git",
+        [
+          "diff",
+          "--cached",
+          "--name-only",
+          "--diff-filter=ACMR",
+          "-z",
+          "--",
+          "src",
+        ],
+        { cwd: root, maxBuffer: 8 * 1024 * 1024 },
+      )
+    ).stdout
+      .split("\0")
+      .filter((file) => file.endsWith(".ts"))
+  : argv;
+if (argv.includes("--staged") && selected.length === 0) process.exit(0);
 for (const file of selected)
   if (!file.endsWith(".ts"))
     throw new TypeError(`Expected an exact TypeScript source file: ${file}`);
