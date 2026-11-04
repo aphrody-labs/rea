@@ -7,9 +7,9 @@ import { fileURLToPath } from "node:url";
 // Route production MCP before importing Incur. Incur owns registration helpers
 // such as `mcp add`, while the MCP runtime serves the stdio tool catalog.
 const args = process.argv.slice(2);
-// Bun OS subcommands run from source, beside the bundled Incur CLI.
-const bunOsCommands = {
-  steam: ["@aphrody/bun-steam/cli", "main"],
+// Workspace-specific commands run from source beside the bundled Incur CLI.
+const workspaceCommands = {
+  steam: ["../src/steam.ts", "main"],
   "steam-rea": ["../src/steamRea.ts", "main"],
   pipeline: ["../src/pipeline/cli.ts", "main"],
   recompile: ["../src/pipeline/recompile.ts", "main"],
@@ -21,10 +21,13 @@ const bunOsCommands = {
   magika: ["../src/replica/cli.ts", "magikaMain"],
   dbxv2: ["../src/bunre.ts", "main"],
   game: ["../src/game/cli.ts", "main"],
+  gamebanana: ["../src/gamebanana/cli.ts", "main"],
+  "ie-format": ["../src/game-formats/cli.ts", "main"],
+  mod: ["../src/modding/cli.ts", "main"],
   install: ["./install.ts", "main"],
 };
-if (args[0] !== undefined && Object.hasOwn(bunOsCommands, args[0])) {
-  const [module, entry] = bunOsCommands[args[0]];
+if (args[0] !== undefined && Object.hasOwn(workspaceCommands, args[0])) {
+  const [module, entry] = workspaceCommands[args[0]];
   const commands = await import(module);
   process.exit(await commands[entry](args.slice(1)));
 }
@@ -74,7 +77,7 @@ const runtimeFiles = isMcpMode
 
 if (!(await compiledRuntimeExists(runtimeFiles))) {
   process.stderr.write(
-    `REA's compiled runtime is missing. Run \`npm ci && npm run build:cached\` in ${packageRoot} to install dependencies and build REA, then restart it. If this is an installed package, reinstall rea-agents.\n`,
+    `REA's compiled runtime is missing. Run \`bun install && bun run build:cached\` in ${packageRoot} to install dependencies and build REA, then restart it. If this is an installed package, reinstall rea-agents.\n`,
   );
   process.exitCode = 1;
 } else if (isMcpMode) {

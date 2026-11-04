@@ -61,60 +61,81 @@ export async function buildIndex(
   });
   const mounted = performance.now();
   const db = new Database(dbPath, { create: true });
-  db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = OFF;");
-  db.exec(
-    "DROP TABLE IF EXISTS entries_fts; DROP TABLE IF EXISTS entries; DROP TABLE IF EXISTS meta;",
-  );
-  db.exec(SCHEMA);
-  const insert = db.prepare(
-    "INSERT OR IGNORE INTO entries (path, dir, name, size, container, kind, format) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  );
-  const kinds: Record<string, number> = {};
-  let batch: VfsEntry[] = [];
-  const flush = db.transaction((rows: VfsEntry[]) => {
-    for (const e of rows) {
-      insert.run(
-        e.path,
-        dirOf(e.path),
-        e.path.slice(e.path.lastIndexOf("/") + 1),
-        e.size,
-        e.container,
-        e.kind,
-        e.format,
-      );
+  let transactionOpen = false;
+  try {
+    db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+    // Keep the previously committed index visible until every new entry and its
+    // search index have been built successfully. SQLite DDL is transactional.
+    db.exec("BEGIN IMMEDIATE");
+    transactionOpen = true;
+    db.exec(
+      "DROP TABLE IF EXISTS entries_fts; DROP TABLE IF EXISTS entries; DROP TABLE IF EXISTS meta;",
+    );
+    db.exec(SCHEMA);
+    const insert = db.prepare(
+      "INSERT OR IGNORE INTO entries (path, dir, name, size, container, kind, format) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
+    let batch: VfsEntry[] = [];
+    const flush = db.transaction((rows: VfsEntry[]) => {
+      for (const e of rows) {
+        insert.run(
+          e.path,
+          dirOf(e.path),
+          e.path.slice(e.path.lastIndexOf("/") + 1),
+          e.size,
+          e.container,
+          e.kind,
+          e.format,
+        );
+      }
+    });
+    for await (const entry of listEntries(root, opts, 256)) {
+      batch.push(entry);
+      if (batch.length >= 5000) {
+        flush(batch);
+        batch = [];
+      }
     }
-  });
-  let total = 0;
-  for await (const entry of listEntries(root, opts, 256)) {
-    kinds[entry.kind] = (kinds[entry.kind] ?? 0) + 1;
-    batch.push(entry);
-    total++;
-    if (batch.length >= 5000) {
-      flush(batch);
-      batch = [];
+    flush(batch);
+    // The case-insensitive UNIQUE path can coalesce entries; report the actual
+    // indexed rows rather than the number attempted by the native listing.
+    const kinds: Record<string, number> = {};
+    let total = 0;
+    for (const row of db
+      .query<{ kind: string; count: number }, []>(
+        "SELECT kind, count(*) AS count FROM entries GROUP BY kind",
+      )
+      .all()) {
+      kinds[row.kind] = row.count;
+      total += row.count;
     }
-  }
-  flush(batch);
-  db.exec("INSERT INTO entries_fts(entries_fts) VALUES ('rebuild')");
-  const meta = db.prepare("INSERT INTO meta (key, value) VALUES (?, ?)");
-  meta.run("root", root);
-  meta.run("report", JSON.stringify(report));
-  meta.run("indexedAt", new Date().toISOString());
-  const inserted = performance.now();
+    db.exec("INSERT INTO entries_fts(entries_fts) VALUES ('rebuild')");
+    const meta = db.prepare("INSERT INTO meta (key, value) VALUES (?, ?)");
+    meta.run("root", root);
+    meta.run("report", JSON.stringify(report));
+    meta.run("indexedAt", new Date().toISOString());
+    const inserted = performance.now();
 
-  const magika = await labelUnknown(db, root, opts, magikaSample);
-  db.close();
-  return {
-    db: dbPath,
-    entries: total,
-    kinds,
-    magika,
-    millis: {
-      mount: Math.round(mounted - begun),
-      insert: Math.round(inserted - mounted),
-      magika: Math.round(performance.now() - inserted),
-    },
-  };
+    const magika = await labelUnknown(db, root, opts, magikaSample);
+    db.exec("COMMIT");
+    transactionOpen = false;
+    return {
+      db: dbPath,
+      entries: total,
+      kinds,
+      magika,
+      millis: {
+        mount: Math.round(mounted - begun),
+        insert: Math.round(inserted - mounted),
+        magika: Math.round(performance.now() - inserted),
+      },
+    };
+  } catch (error) {
+    if (transactionOpen) db.exec("ROLLBACK");
+    throw error;
+  } finally {
+    db.close(true);
+  }
 }
 
 async function labelUnknown(
@@ -130,11 +151,12 @@ async function labelUnknown(
     .all(sample);
   if (unknown.length === 0) return { sampled: 0, labelled: 0, skipped: null };
   const scratch = mkdtempSync(join(tmpdir(), "re-game-magika-"));
-  const worker = await GameWorker.start(root, opts);
-  const update = db.prepare("UPDATE entries SET magika = ? WHERE id = ?");
+  let worker: GameWorker | undefined;
   let labelled = 0;
   let skipped: string | null = null;
   try {
+    worker = await GameWorker.start(root, opts);
+    const update = db.prepare("UPDATE entries SET magika = ? WHERE id = ?");
     for (const row of unknown) {
       const head = await worker.request("head", row.path);
       if (!head.ok) continue;
@@ -152,8 +174,11 @@ async function labelUnknown(
       }
     }
   } finally {
-    await worker.close();
-    rmSync(scratch, { recursive: true, force: true });
+    try {
+      await worker?.close();
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   }
   return { sampled: unknown.length, labelled, skipped };
 }

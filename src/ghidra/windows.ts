@@ -1,27 +1,15 @@
 import { dirname, join } from "node:path";
 import { checkoutRoot } from "../pipeline/runner.js";
-
-// `bun:windows` exists only in the retired aphrody-labs/bun fork; upstream Bun has no such
-// module. Load it lazily so the MCP server and CLI start on upstream Bun and only the Win32
-// Ghidra commands report it as unavailable.
-const windows = await import("bun:windows").then(
-  (module) => module.default,
-  () => null,
-);
+import { inspectGhidraInstallation } from "./GhidraInstallation.js";
 
 const root = checkoutRoot();
 export const ghidraRoot = join(root, "vendor", "ghidra");
 export const ntrGhidraRoot = join(root, "vendor", "ntr-ghidra");
 
-function requireWindows(): NonNullable<typeof windows> {
-  if (!windows)
-    throw new Error(
-      "Ghidra Win32 integration needs the bun:windows module, which upstream Bun does not ship",
-    );
-  if (!windows.isSupported)
-    throw new Error("Ghidra Win32 integration requires Windows");
-  return windows;
-}
+const requireWindows = (): void => {
+  if (process.platform !== "win32")
+    throw new Error("Ghidra Windows build and PE inspection require Windows");
+};
 
 async function resolveJava(): Promise<string | null> {
   const pathJava = Bun.which("java");
@@ -31,136 +19,85 @@ async function resolveJava(): Promise<string | null> {
     if (await Bun.file(configured).exists()) return configured;
   }
   const microsoft = "C:\\Program Files\\Microsoft";
-  const candidates = Array.fromAsync(
+  if (!(await Bun.file(microsoft).exists())) return null;
+  const candidates = await Array.fromAsync(
     new Bun.Glob("jdk-*/bin/java.exe").scan({ cwd: microsoft, absolute: true }),
   );
-  return (await candidates).sort().at(-1) ?? null;
-}
-
-async function probeGhidraInstall() {
-  const dir = process.env.GHIDRA_INSTALL_DIR ?? null;
-  const properties = dir
-    ? Bun.file(join(dir, "Ghidra", "application.properties"))
-    : null;
-  const version =
-    properties && (await properties.exists())
-      ? (/application\.version=(.+)/
-          .exec(await properties.text())?.[1]
-          ?.trim() ?? null)
-      : null;
-  const javaHome = process.env.JAVA_HOME ?? null;
-  const javaHomeValid = javaHome
-    ? await Bun.file(join(javaHome, "bin", "java.exe")).exists()
-    : false;
-  const java = await resolveJava();
-  return {
-    dir,
-    version,
-    analyzeHeadless: dir
-      ? await Bun.file(join(dir, "support", "analyzeHeadless.bat")).exists()
-      : false,
-    javaHome,
-    javaHomeValid,
-    remediation: javaHomeValid
-      ? null
-      : java
-        ? `JAVA_HOME does not hold bin\\java.exe; run Ghidra consumers with JAVA_HOME=${dirname(dirname(java))}`
-        : "install JDK 21 or newer and set JAVA_HOME",
-  };
+  return candidates.sort().at(-1) ?? null;
 }
 
 export async function probeGhidraWindows() {
-  const windows = requireWindows();
-  const toolchain = windows.toolchain();
+  const java = await resolveJava();
+  const inspection = inspectGhidraInstallation({
+    environment: process.env,
+    ...(process.env.GHIDRA_INSTALL_DIR === undefined
+      ? {}
+      : { installDir: process.env.GHIDRA_INSTALL_DIR }),
+    ...(process.env.JAVA_HOME === undefined
+      ? {}
+      : { javaHome: process.env.JAVA_HOME }),
+  });
   return {
     source: ghidraRoot,
-    ntrExtension: ntrGhidraRoot,
     sourceReady: await Bun.file(join(ghidraRoot, "build.gradle")).exists(),
-    ntrExtensionReady: await Bun.file(
-      join(ntrGhidraRoot, "Module.manifest"),
-    ).exists(),
-    java: await resolveJava(),
-    // The installed Ghidra used by `re pipeline --external` and the rea Ghidra provider; both
-    // take Java from JAVA_HOME, so a stale JAVA_HOME disables them even with a JDK on PATH.
-    install: await probeGhidraInstall(),
-    windows: windows.version(),
-    conpty: windows.conpty.info(),
-    msvc: toolchain.msvc?.version ?? null,
-    windowsSdk: toolchain.sdk?.version ?? null,
+    extensionSource: ntrGhidraRoot,
+    extensionSourceReady: await Bun.file(join(ntrGhidraRoot, "Module.manifest")).exists(),
+    java,
+    install: inspection,
   };
 }
 
+/** Delegate PE parsing to the native yolo-re CLI, which owns the PE parser. */
 export async function inspectPeForGhidra(path: string) {
-  const windows = requireWindows();
-  const bytes = new Uint8Array(await Bun.file(path).arrayBuffer());
-  if (!windows.pe.looksLikePe(bytes))
-    throw new TypeError(`not a PE image: ${path}`);
-  const image = windows.pe.parse(bytes, path);
-  if (!image) throw new TypeError(`invalid PE image: ${path}`);
-  return {
-    path,
-    kind: image.kind,
-    machine: image.machine,
-    sections: image.sections.length,
-    imports: image.imports.reduce(
-      (count, item) => count + item.functions.length,
-      0,
-    ),
-    exports: image.exports.length,
-    authenticode: image.authenticode,
-  };
+  requireWindows();
+  const executable = Bun.which("bunre") ?? join(root, "target", "debug", "bunre.exe");
+  if (!(await Bun.file(executable).exists()))
+    throw new Error("bunre is required for PE inspection; build yolo-re's native CLI first");
+  const child = Bun.spawn([executable, "pipeline", "triage", path], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  if (exitCode !== 0) throw new Error(stderr.trim() || `bunre exited ${exitCode}`);
+  return JSON.parse(stdout) as unknown;
 }
 
+/** Build official upstream Ghidra source with its own Gradle wrapper. */
 export async function buildGhidraWindows(): Promise<number> {
-  const windows = requireWindows();
+  requireWindows();
   const java = await resolveJava();
-  if (!java) throw new Error("Ghidra build requires JDK 25 on PATH");
+  if (!java) throw new Error("Ghidra source build requires a JDK on PATH or JAVA_HOME");
   const launcher = join(ghidraRoot, "gradlew.bat");
   if (!(await Bun.file(launcher).exists()))
-    throw new Error(`missing Ghidra Gradle launcher: ${launcher}`);
-  const job = new windows.Job({
-    name: "BunEngine.GhidraBuild",
-    killOnClose: true,
-  });
-  try {
-    const env = {
-      ...process.env,
-      BUN_ENGINE_ROOT: root,
-      JAVA: java,
-      JAVA_HOME: dirname(dirname(java)),
-    };
-    const run = async (args: string[]) => {
-      const child = job.spawn(
-        ["cmd.exe", "/d", "/s", "/c", launcher, ...args],
-        {
-          cwd: ghidraRoot,
-          env,
-          stdin: "inherit",
-          stdout: "inherit",
-          stderr: "inherit",
-        },
-      );
-      return await child.exited;
-    };
-    const flatRepoReady =
-      (
-        await Array.fromAsync(
-          new Bun.Glob("*").scan({
-            cwd: join(ghidraRoot, "dependencies", "flatRepo"),
-            onlyFiles: false,
-          }),
-        )
-      ).length > 0;
-    if (!flatRepoReady) {
-      const fetched = await run([
-        "-I",
-        "gradle/support/fetchDependencies.gradle",
-        "init",
-      ]);
-      if (fetched !== 0) return fetched;
-    }
-    return await run(["buildGhidra"]);
-  } finally {
-    job.close();
+    throw new Error(`Ghidra source is not initialized; missing ${launcher}`);
+  const env = {
+    ...process.env,
+    JAVA: java,
+    JAVA_HOME: dirname(dirname(java)),
+  };
+  const run = async (args: string[]): Promise<number> => {
+    const child = Bun.spawn(["cmd.exe", "/d", "/s", "/c", launcher, ...args], {
+      cwd: ghidraRoot,
+      env,
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    return child.exited;
+  };
+  const flatRepo = join(ghidraRoot, "dependencies", "flatRepo");
+  const flatRepoReady =
+    (await Array.fromAsync(
+      new Bun.Glob("*").scan({ cwd: flatRepo, onlyFiles: false }),
+    )).length > 0;
+  if (!flatRepoReady) {
+    const fetched = await run(["-I", "gradle/support/fetchDependencies.gradle", "init"]);
+    if (fetched !== 0) return fetched;
   }
+  return run(["buildGhidra"]);
 }

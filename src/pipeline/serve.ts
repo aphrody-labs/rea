@@ -17,11 +17,17 @@ export function servePipeline(port = 0) {
             input: string;
             target?: TargetKind;
             outdir: string;
+            external?: boolean;
+            discoverFunctions?: boolean;
+            maxFunctions?: number;
           };
           return Response.json(
             await runPipeline(b.input, {
               target: b.target ?? "os",
               outdir: b.outdir,
+              external: b.external,
+              discoverFunctions: b.discoverFunctions,
+              maxFunctions: b.maxFunctions,
             }),
           );
         }

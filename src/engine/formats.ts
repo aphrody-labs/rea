@@ -8,6 +8,7 @@ import {
   openBinary,
   runFormats,
 } from "@aphrody/bun-engine/formats";
+import { identifyWithMagika } from "../ml/magika.js";
 
 export interface FormatInspection {
   path: string;
@@ -32,14 +33,17 @@ export async function inspectFormat(
   path: string,
   options: { files?: boolean; digest?: boolean; magika?: boolean } = {},
 ): Promise<FormatInspection> {
-  const image = await openBinary(path, { magika: options.magika ?? false });
+  const image = await openBinary(path);
   const summary = image.toJSON();
+  const detection = options.magika
+    ? await identifyWithMagika(path)
+    : summary.detection;
   return {
     path: summary.path,
     size: summary.size,
     format: summary.format,
     platform: summary.platform,
-    detection: summary.detection,
+    detection,
     arch: summary.arch,
     entry: hex(summary.entry),
     header: summary.header,

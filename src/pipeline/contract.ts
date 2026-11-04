@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Mirrors crates/re/src/pipeline/contract.rs and the JSON Schemas in crates/re/schema/.
+// Mirrors crates/yolo-re-core/src/pipeline/contract.rs and its generated JSON Schemas.
 
 export type TargetKind = "os" | "bios" | "firmware";
 export type Stage =
@@ -187,6 +187,7 @@ export interface PipelineOptions {
   target: TargetKind;
   outdir: string;
   external?: boolean | undefined;
+  discoverFunctions?: boolean | undefined;
   trace?: boolean | undefined;
   maxFunctions?: number | undefined;
   maxInsns?: number | undefined;

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // `re bin`: static, read-only first pass over a native binary (emulator release in usr/, Steam
 // client or game executable, Proton/Wine build on a remote host). Each fact comes from its owner:
-// `bunre pipeline triage` (crates/re: format, hashes, sections with entropy, imports, libraries,
-// exports, string sample), `bun:windows` PE parsing (imports per DLL, version resource,
-// Authenticode, subsystem) and provenance from the bep release database (`usr/`) or the Steam
-// libraries (`@aphrody/bun-steam`). Nothing is executed, patched or written beside the target.
+// `bunre pipeline triage` (yolo-re format, hashes, sections with entropy, imports, libraries,
+// exports and string sample) and provenance from the yolo-re release database (`usr/`) or Steam
+// libraries (`@aphrody/bun-steam`). PE version resources and Authenticode are unavailable.
+// Nothing is executed, patched or written beside the target.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -12,14 +12,6 @@ import { parseArgs } from "node:util";
 import { installedGames, norm, resolveSteamRoot } from "@aphrody/bun-steam";
 import { installedRelease, usrRoot } from "@aphrody/bun-engine/usr";
 import { findBinary, spawnCaptured } from "../pipeline/runner.js";
-
-// `bun:windows` exists only in the retired aphrody-labs/bun fork. Upstream Bun lacks it, so the
-// PE detail layer is optional: without it `peFacts` reports nothing and `bunre pipeline triage`
-// stays the source of format, import and section facts.
-const windows = await import("bun:windows").then(
-  (module) => module.default,
-  () => null,
-);
 
 /** Remote reads stay bounded: binaries only, never whole game installs. */
 const MAX_REMOTE_BYTES = 256 * 1024 * 1024;
@@ -63,44 +55,6 @@ async function triage(
   if (code !== 0 || !out.trim())
     throw new Error(`bunre pipeline triage exited ${code}: ${err.trim()}`);
   return JSON.parse(out) as Record<string, unknown>;
-}
-
-function peFacts(
-  bytes: Uint8Array,
-  path: string,
-  perModule: number,
-): Record<string, unknown> | null {
-  if (!windows?.pe.looksLikePe(bytes)) return null;
-  const image = windows.pe.parse(bytes, path);
-  if (!image) return null;
-  return JSON.parse(
-    JSON.stringify(
-      {
-        kind: image.kind,
-        machine: image.machine,
-        bits: image.bits,
-        subsystem: image.subsystem,
-        timestamp: new Date(Number(image.timestamp) * 1000).toISOString(),
-        imageBase: image.imageBase,
-        entryRva: `0x${Number(image.entryRva).toString(16)}`,
-        isDotnet: image.isDotnet,
-        version: image.version,
-        authenticode: image.authenticode,
-        imports: image.imports.map((item) => ({
-          module: item.module,
-          delay: item.delay,
-          count: item.functions.length,
-          functions: item.functions.slice(0, perModule),
-        })),
-        exports: {
-          name: image.exportName,
-          count: image.exports.length,
-        },
-        warnings: image.warnings,
-      },
-      bigints,
-    ),
-  ) as Record<string, unknown>;
 }
 
 const inside = (child: string, parent: string) => {
@@ -187,11 +141,12 @@ export async function inspectBinary(
   const remote = o.host ? await fetchRemote(o.host, path) : undefined;
   const local = remote?.local ?? resolve(path);
   try {
-    const bytes = await Bun.file(local).bytes();
     const report: BinaryReport = {
       source: { host: o.host ?? null, path: o.host ? path : local },
       triage: await triage(local, o.strings ?? 64),
-      pe: peFacts(bytes, local, o.importsPerModule ?? 16),
+      // The yolo-re Rust triage currently supplies PE format/sections/imports. Rich PE resources
+      // and Authenticode are unavailable until a native parser exposes those fields.
+      pe: null,
       provenance: o.host
         ? { remote: { host: o.host, path } }
         : await provenance(local),
@@ -207,8 +162,9 @@ export async function inspectBinary(
 const USAGE = `re bin <file> [--strings N] [--imports N] [--host SSH_HOST] [--json]
 
 Static first pass over a PE or ELF binary: format, SHA-256, sections with entropy, imported
-libraries and symbols, exports, PE version resource and Authenticode, a bounded string sample and
-provenance (bep release in usr/, Steam app or client). --host reads a remote file read-only
+libraries and symbols, exports, a bounded string sample and provenance (yolo-re release in usr/,
+Steam app or client). PE version resources and Authenticode are currently unavailable.
+--host reads a remote file read-only
 through \`ssh HOST cat\` (bounded to 256 MiB) and deletes the local temporary copy.`;
 
 /** Entry point of `re bin ...`. Returns the exit code. */
@@ -248,10 +204,6 @@ export async function main(argv: string[]): Promise<number> {
     exports: string[];
     strings_sample: string[];
   };
-  const pe = report.pe as {
-    version?: { strings?: Record<string, string> };
-    authenticode?: unknown;
-  } | null;
   console.log(
     `${report.source.host ? `${report.source.host}:` : ""}${report.source.path}\n  ${t.format} ${t.arch ?? "?"} ${t.size} bytes sha256 ${t.sha256}`,
   );
@@ -259,14 +211,8 @@ export async function main(argv: string[]): Promise<number> {
     `  libraries (${t.libraries.length}): ${t.libraries.slice(0, 12).join(", ")}`,
   );
   console.log(`  imports ${t.imports.length}, exports ${t.exports.length}`);
-  if (pe?.version?.strings)
-    console.log(
-      `  version: ${Object.entries(pe.version.strings)
-        .map(([k, v]) => `${k}=${v}`)
-        .join("; ")}`,
-    );
-  if (pe)
-    console.log(`  authenticode: ${pe.authenticode ? "present" : "none"}`);
+  if (t.format.toLowerCase().includes("pe"))
+    console.log("  PE version resources and Authenticode: unavailable in current yolo-re triage");
   console.log(`  provenance: ${JSON.stringify(report.provenance)}`);
   console.log(`  strings: ${t.strings_sample.slice(0, 8).join(" | ")}`);
   return 0;

@@ -1,4 +1,4 @@
-// `re replica`, `re ghidra-win` and `re magika`: the Bun OS RE commands formerly hosted by bun-engine.
+// `re replica`, `re ghidra-win` and `re magika` workspace commands.
 // Every command prints JSON; `--json` is accepted everywhere for a uniform `re` surface.
 import { stat } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";

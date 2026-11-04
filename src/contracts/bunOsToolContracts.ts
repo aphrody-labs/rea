@@ -162,6 +162,11 @@ export const BUN_OS_TOOL_CONTRACTS = [
         .boolean()
         .optional()
         .describe("Enable heavy external adapters (Ghidra headless)"),
+      discover_functions: z
+        .boolean()
+        .optional()
+        .describe("Discover reachable functions with the Rust decompiler; requires external and the decompile feature. Discovery can be expensive."),
+      max_functions: z.number().int().positive().optional().describe("Maximum functions to lift and decompile; does not bound discovery time."),
       trace: z
         .boolean()
         .optional()

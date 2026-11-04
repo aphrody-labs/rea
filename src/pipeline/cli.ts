@@ -11,7 +11,7 @@ import { defaultDbPath, openAnalysisDb, recordRun } from "./db.js";
 import { emitSchemas, listAdapters, runPipeline } from "./runner.js";
 
 const USAGE = `re pipeline <input> --target <os|bios|firmware> [--out DIR] [--external] [--trace]
-                 [--max-functions N] [--max-insns N] [--timeout SECS] [--db] [--json]
+                 [--discover-functions] [--max-functions N] [--max-insns N] [--timeout SECS] [--db] [--json]
 re pipeline adapters [--stage <stage>] [--json]
 re pipeline schema <dir>`;
 
@@ -43,6 +43,7 @@ export async function main(argv: string[]): Promise<number> {
       out: { type: "string" },
       stage: { type: "string" },
       external: { type: "boolean", default: false },
+      "discover-functions": { type: "boolean", default: false },
       trace: { type: "boolean", default: false },
       db: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
@@ -79,6 +80,7 @@ export async function main(argv: string[]): Promise<number> {
     target,
     outdir: out,
     external: values.external,
+    discoverFunctions: values["discover-functions"],
     trace: values.trace,
     maxFunctions: values["max-functions"]
       ? Number(values["max-functions"])
@@ -93,5 +95,5 @@ export async function main(argv: string[]): Promise<number> {
   }
   if (values.json) console.log(JSON.stringify(report, null, 2));
   else printReport(report);
-  return report.summary === "failed" ? 1 : 0;
+  return report.summary === "ok" ? 0 : 1;
 }

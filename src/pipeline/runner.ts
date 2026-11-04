@@ -9,15 +9,14 @@ import type {
   RecompileOptions,
   Stage,
 } from "./contract.js";
+import { STAGES } from "./contract.js";
 
 // Only `import.meta.url` survives the runtime bundle (scripts/bundle-runtime.mjs).
 const here = dirname(fileURLToPath(import.meta.url));
 const SUFFIX = process.platform === "win32" ? ".exe" : "";
 
-/** Bun OS checkout root: BUN_OS_ROOT or the nearest ancestor holding AGENTS.md and crates/. */
+/** The yolo-re checkout root: nearest ancestor holding AGENTS.md and crates/. */
 export function findRoot(from = process.cwd()): string | undefined {
-  if (process.env.BUN_OS_ROOT && existsSync(process.env.BUN_OS_ROOT))
-    return process.env.BUN_OS_ROOT;
   let dir = resolve(from);
   for (;;) {
     if (existsSync(join(dir, "AGENTS.md")) && existsSync(join(dir, "crates")))
@@ -29,15 +28,15 @@ export function findRoot(from = process.cwd()): string | undefined {
 }
 
 /**
- * The Bun OS checkout this package runs from (`BUN_OS_ROOT` overrides); outside a checkout, the
- * directory that would hold `packages/re`.
+ * The yolo-re checkout this package runs from, independent of ambient environment
+ * overrides; outside a checkout, the repository root above this package.
  */
 export function checkoutRoot(): string {
   return findRoot(here) ?? resolve(here, "..", "..", "..", "..");
 }
 
 /**
- * Locate a native Bun OS binary built from this checkout: the `env` override, then
+ * Locate a native binary built from this checkout: the `env` override, then
  * `target/{,slot-N/}{release,debug}` of the checkout and the shared Aphrody Cargo target directories
  * (newest build wins), then
  * `PATH`. The one lookup used for `bunre` and the `bun-engine` machine CLI.
@@ -82,16 +81,20 @@ export async function findNative(
   return best?.path ?? Bun.which(name) ?? undefined;
 }
 
-/** Build command of a native owner through the serialized wrapper (AGENTS.md). */
-export const nativeBuildHint = (pkg: string, bin: string): string =>
-  `bun msvc exec --toolset 14.44 -- bun scripts/cargo.ts exec -- build --release -p ${pkg} --bin ${bin}`;
+/** Build command for the native yolo-re CLI from this Cargo workspace. */
+export const nativeBuildHint = (features: readonly string[] = []): string => {
+  const featureArgs = features.length
+    ? ` --features ${features.join(",")}`
+    : "";
+  return `cargo build --locked -p yolo-re-core --bin bunre${featureArgs}`;
+};
 
 /** Locate the Rust `bunre` binary (`BUNRE_BIN` overrides). */
 export async function findBinary(): Promise<string> {
   const bin = await findNative("bunre", "BUNRE_BIN");
   if (bin) return bin;
   throw new Error(
-    `bunre not found. Build it with \`${nativeBuildHint("bun-re", "bunre")}\`, or set BUNRE_BIN.`,
+    `bunre not found. Build it with \`${nativeBuildHint()}\`, or set BUNRE_BIN.`,
   );
 }
 
@@ -165,7 +168,7 @@ export async function runEngine(
   const bin = await findEngine();
   if (!bin)
     throw new Error(
-      `bun-engine not found. Build it with \`${nativeBuildHint("bun-engine", "bun-engine")}\`, or set BUN_ENGINE_NATIVE.`,
+      "bun-engine was not found. This workspace does not build the optional Bun Engine runtime; set BUN_ENGINE_NATIVE to its executable.",
     );
   return spawnCaptured([bin, ...args], timeoutMs);
 }
@@ -183,6 +186,7 @@ export async function runPipeline(
     resolve(opts.outdir),
   ];
   if (opts.external) args.push("--external");
+  if (opts.discoverFunctions) args.push("--discover-functions");
   if (opts.trace) args.push("--trace");
   if (opts.maxFunctions)
     args.push("--max-functions", String(opts.maxFunctions));
@@ -194,7 +198,66 @@ export async function runPipeline(
   );
   if (!out.trim())
     throw new Error(`bunre pipeline exited ${code}: ${err.trim()}`);
-  return JSON.parse(out) as PipelineReport;
+  let report: unknown;
+  try {
+    report = JSON.parse(out);
+  } catch {
+    throw new Error(
+      `bunre pipeline exited ${code} without a valid JSON report: ${err.trim()}`,
+    );
+  }
+  if (!isPipelineReport(report))
+    throw new Error("bunre pipeline returned an invalid pipeline report");
+  return report;
+}
+
+function isPipelineReport(value: unknown): value is PipelineReport {
+  if (typeof value !== "object" || value === null) return false;
+  const report = value as Record<string, unknown>;
+  return (
+    report.schema_version === 1 &&
+    typeof report.input === "string" &&
+    (report.target === "os" ||
+      report.target === "bios" ||
+      report.target === "firmware") &&
+    typeof report.outdir === "string" &&
+    (report.summary === "ok" ||
+      report.summary === "partial" ||
+      report.summary === "failed") &&
+    Array.isArray(report.stages) &&
+    report.stages.every((stage) => {
+      if (typeof stage !== "object" || stage === null) return false;
+      const item = stage as Record<string, unknown>;
+      return (
+        typeof item.stage === "string" &&
+        STAGES.includes(item.stage as Stage) &&
+        typeof item.adapter === "string" &&
+        (item.status === "ok" ||
+          item.status === "partial" ||
+          item.status === "unavailable" ||
+          item.status === "skipped" ||
+          item.status === "failed") &&
+        typeof item.detail === "string" &&
+        Array.isArray(item.artifacts) &&
+        item.artifacts.every((artifact) => {
+          if (typeof artifact !== "object" || artifact === null) return false;
+          const file = artifact as Record<string, unknown>;
+          return (
+            typeof file.kind === "string" &&
+            typeof file.path === "string" &&
+            typeof file.bytes === "number"
+          );
+        }) &&
+        typeof item.metrics === "object" &&
+        item.metrics !== null &&
+        !Array.isArray(item.metrics) &&
+        Object.values(item.metrics as Record<string, unknown>).every(
+          (metric) => typeof metric === "number",
+        ) &&
+        "output" in item
+      );
+    })
+  );
 }
 
 export async function listAdapters(stage?: Stage): Promise<AdapterInfo[]> {

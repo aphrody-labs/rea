@@ -138,6 +138,8 @@ export const registerBunOsTools = (server: EvidenceMcpServer): void => {
       target: (a.target ?? "os") as TargetKind,
       outdir: a.outdir,
       external: a.external ?? false,
+      discoverFunctions: a.discover_functions ?? false,
+      maxFunctions: a.max_functions,
       trace: a.trace ?? false,
     }),
   );

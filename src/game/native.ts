@@ -51,7 +51,7 @@ async function bunre(): Promise<string> {
     return await findBinary();
   } catch {
     throw new Error(
-      `bunre not found. Build it with \`${nativeBuildHint("bun-re", "bunre")} --features assets\`, or set BUNRE_BIN.`,
+      `bunre not found. Build it with \`${nativeBuildHint(["assets"])}\`, or set BUNRE_BIN.`,
     );
   }
 }
@@ -113,22 +113,35 @@ export async function* listEntries(
     ],
     { stdout: "pipe", stderr: "pipe" },
   );
+  // Drain stderr concurrently: the producer may otherwise block on a full pipe
+  // while the consumer is waiting for the next stdout entry.
+  const stderr = proc.stderr.text();
   const decoder = new TextDecoder();
   let pending = "";
-  for await (const chunk of proc.stdout) {
-    pending += decoder.decode(chunk, { stream: true });
-    let at = pending.indexOf("\n");
-    while (at >= 0) {
-      const line = pending.slice(0, at);
-      pending = pending.slice(at + 1);
-      if (line.trim()) yield JSON.parse(line) as VfsEntry;
-      at = pending.indexOf("\n");
+  try {
+    for await (const chunk of proc.stdout) {
+      pending += decoder.decode(chunk, { stream: true });
+      let at = pending.indexOf("\n");
+      while (at >= 0) {
+        const line = pending.slice(0, at);
+        pending = pending.slice(at + 1);
+        if (line.trim()) yield JSON.parse(line) as VfsEntry;
+        at = pending.indexOf("\n");
+      }
     }
+    pending += decoder.decode();
+    if (pending.trim()) yield JSON.parse(pending) as VfsEntry;
+    const code = await proc.exited;
+    if (code !== 0)
+      throw new Error(
+        `bunre game ls: ${(await stderr).trim() || `exit ${code}`}`,
+      );
+  } finally {
+    // Also terminate on malformed JSON or when a caller stops iterating early.
+    if (proc.exitCode === null) proc.kill();
+    await proc.exited;
+    await stderr;
   }
-  if (pending.trim()) yield JSON.parse(pending) as VfsEntry;
-  const code = await proc.exited;
-  if (code !== 0)
-    throw new Error(`bunre game ls: ${(await proc.stderr.text()).trim()}`);
 }
 
 export interface VfsEntry {
@@ -183,11 +196,17 @@ export class GameWorker {
     );
     worker.#proc = proc;
     worker.#reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
-    const ready = await worker.#header();
-    if (!ready.ready) throw new Error("bunre game worker did not start");
-    worker.entries = ready.entries ?? 0;
-    worker.profile = ready.profile ?? "";
-    return worker;
+    try {
+      const ready = await worker.#header();
+      if (!ready.ready) throw new Error("bunre game worker did not start");
+      worker.entries = ready.entries ?? 0;
+      worker.profile = ready.profile ?? "";
+      return worker;
+    } catch (error) {
+      if (proc.exitCode === null) proc.kill();
+      await proc.exited;
+      throw error;
+    }
   }
 
   async #fill(min: number): Promise<void> {
