@@ -3,7 +3,7 @@ import { access } from "node:fs/promises";
 import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import writeFileAtomic from "write-file-atomic";
+import writeFileAtomic from "../filesystem/atomicWrite.js";
 
 import { analysisErrorWithCleanupFailure } from "../domain/analysisErrorCleanup.js";
 import { AnalysisCapabilityUnavailableError } from "../domain/analysisErrorCore.js";

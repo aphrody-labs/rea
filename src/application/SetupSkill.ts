@@ -1,7 +1,7 @@
 import { copyFile, lstat, mkdir, readFile, rm } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { dirname, join } from "node:path";
-import writeFileAtomic from "write-file-atomic";
+import writeFileAtomic from "../filesystem/atomicWrite.js";
 import { err, ok, type Result } from "../domain/result.js";
 import { readBoundedFileBytes } from "../process/BoundedFileBytes.js";
 import type { ArtifactResourceScope } from "../artifacts/ArtifactResourceScope.js";

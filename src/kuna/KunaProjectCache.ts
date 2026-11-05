@@ -12,7 +12,7 @@ import {
 import { join } from "node:path";
 
 import canonicalize from "canonicalize";
-import writeFileAtomic from "write-file-atomic";
+import writeFileAtomic from "../filesystem/atomicWrite.js";
 import { z } from "zod";
 
 import { AnalysisCleanupLease } from "../artifacts/AnalysisCleanupLease.js";

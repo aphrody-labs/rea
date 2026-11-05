@@ -9,7 +9,7 @@ import { snapshotEnvironment } from "../process/snapshotEnvironment.js";
 import { mkdir, readFile, realpath } from "node:fs/promises";
 import { basename, dirname, join, posix, win32 } from "node:path";
 
-import writeFileAtomic from "write-file-atomic";
+import writeFileAtomic from "../filesystem/atomicWrite.js";
 
 import { windowsPrivateRuntime } from "../windows/WindowsPrivateRuntime.js";
 import {

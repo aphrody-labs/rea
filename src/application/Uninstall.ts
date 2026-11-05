@@ -12,7 +12,7 @@ import { constants as fsConstants } from "node:fs";
 import { homeDirectoryFromEnvironment } from "../config/homeDirectory.js";
 import { join } from "node:path";
 
-import writeFileAtomic from "write-file-atomic";
+import writeFileAtomic from "../filesystem/atomicWrite.js";
 import { z } from "zod";
 
 import { PRODUCT_IDENTITY } from "../identity.js";
